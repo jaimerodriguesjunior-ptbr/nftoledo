@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node test-status-nuvem.mjs)",
+      "Bash(npx tsc *)",
+      "Bash(npx next *)",
+      "Bash(git mv *)",
+      "Bash(gh auth *)",
+      "Bash(npx vercel *)",
+      "Bash(git config *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(xargs grep *)",
+      "Read(//g/projetos/autoeletrica/**)",
+      "Bash(python3)",
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")"
+    ]
+  }
+}

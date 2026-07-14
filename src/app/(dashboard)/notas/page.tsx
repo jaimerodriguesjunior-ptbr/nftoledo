@@ -1,15 +1,50 @@
 import { getInvoices } from "@/actions/fiscal";
 import { FileText } from "lucide-react";
 import NotasFilter from "./NotasFilter";
-import NotaRow from "./NotaRow";
+import NotasList from "./NotasList";
+
+type Nota = {
+  id: string;
+  client_id?: string | null;
+  status?: string | null;
+  numero?: string | null;
+  pdf_url?: string | null;
+  xml_url?: string | null;
+  error_message?: string | null;
+  data_emissao?: string | null;
+  created_at?: string | null;
+  descricao_servico?: string | null;
+  valor_total?: number | null;
+  clients?: { nome?: string | null } | null;
+};
+
+function firstParam(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 export default async function NotasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string; status?: string }>;
+  searchParams: Promise<{
+    mes?: string | string[];
+    status?: string | string[];
+    ambiente?: "all" | "production" | "homologation" | string[];
+  }>;
 }) {
   const params = await searchParams;
-  const notas = await getInvoices({ mes: params.mes, status: params.status });
+  const mes = firstParam(params.mes);
+  const status = firstParam(params.status);
+  const ambienteParam = firstParam(params.ambiente);
+  const ambienteAtual = ambienteParam || "production";
+  const environment =
+    ambienteAtual === "production" || ambienteAtual === "homologation"
+      ? ambienteAtual
+      : undefined;
+  const notas = (await getInvoices({
+    mes,
+    status,
+    environment,
+  })) as Nota[];
 
   const mesAtual = (() => {
     const d = new Date();
@@ -25,34 +60,23 @@ export default async function NotasPage({
         </div>
       </div>
 
-      <NotasFilter mesAtual={params.mes || mesAtual} statusAtual={params.status || ""} />
+      <NotasFilter
+        mesAtual={mes || mesAtual}
+        statusAtual={status || ""}
+        ambienteAtual={ambienteAtual}
+      />
 
       {notas.length === 0 ? (
         <div className="card text-center py-10">
-          <FileText size={32} className="text-gray-300 mx-auto mb-3" />
+          <FileText size={32} className="mx-auto mb-3 text-gray-300" />
           <p className="text-gray-500">Nenhuma nota encontrada para os filtros selecionados.</p>
         </div>
       ) : (
-        <div className="card p-0 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50 text-left">
-                <th className="px-4 py-3 font-medium text-gray-600">Data</th>
-                <th className="px-4 py-3 font-medium text-gray-600">Cliente</th>
-                <th className="px-4 py-3 font-medium text-gray-600">Descrição</th>
-                <th className="px-4 py-3 font-medium text-gray-600">Valor</th>
-                <th className="px-4 py-3 font-medium text-gray-600">Nº NF</th>
-                <th className="px-4 py-3 font-medium text-gray-600">Status</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {notas.map((nota: any) => (
-                <NotaRow key={nota.id} nota={nota} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <NotasList
+          notas={notas}
+          mesAtual={mes || mesAtual}
+          ambienteAtual={ambienteAtual}
+        />
       )}
     </div>
   );

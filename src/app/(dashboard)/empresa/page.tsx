@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition } from "react";
 import { getCompany, saveCompany } from "@/actions/empresa";
 import { Building2, CheckCircle } from "lucide-react";
 
+
 const MUNICIPIOS = [
   { ibge: "4127700", label: "Toledo – PR (IBGE 4127700)" },
   { ibge: "4108809", label: "Guaíra – PR (IBGE 4108809)" },
@@ -15,12 +16,18 @@ export default function EmpresaPage() {
     inscricao_estadual: "", regime_tributario: "1", codigo_municipio_ibge: "4127700",
     cidade: "", uf: "", cep: "", logradouro: "", numero: "", complemento: "",
     bairro: "", email_contato: "", telefone: "", nfse_login: "", nfse_password: "",
-    cnae_padrao: "4520007", codigo_servico_padrao: "14.01",
+    cnae_padrao: "", codigo_servico_padrao: "",
     aliquota_iss_padrao: "3", environment: "production",
   });
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const [certFile, setCertFile] = useState<File | null>(null);
+  const [certPassword, setCertPassword] = useState("");
+  const [certUploading, setCertUploading] = useState(false);
+  const [certError, setCertError] = useState<string | null>(null);
+  const [certSuccess, setCertSuccess] = useState(false);
 
   useEffect(() => {
     getCompany().then((data) => {
@@ -50,9 +57,40 @@ export default function EmpresaPage() {
         regime_tributario: form.regime_tributario,
       });
       if (result?.error) setError(result.error);
+      else if (result?.syncError) setError(`Dados salvos, mas a sincronização fiscal falhou: ${result.syncError}`);
       else setSuccess(true);
     });
   }
+
+  const handleUploadCert = async () => {
+    if (!certFile || !form.cnpj || !certPassword) {
+      setCertError("Preencha o CNPJ na seção Identificação, selecione o arquivo .pfx e informe a senha.");
+      return;
+    }
+    setCertUploading(true);
+    setCertError(null);
+    setCertSuccess(false);
+    try {
+      const fd = new FormData();
+      fd.append("file", certFile);
+      fd.append("cnpj", form.cnpj);
+      fd.append("password", certPassword);
+      fd.append("environment", form.environment || "production");
+
+      const res = await fetch("/api/fiscal/certificado", { method: "POST", body: fd });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Erro no upload");
+      }
+      setCertSuccess(true);
+      setCertFile(null);
+      setCertPassword("");
+    } catch (e: unknown) {
+      setCertError(e instanceof Error ? e.message : "Erro desconhecido");
+    } finally {
+      setCertUploading(false);
+    }
+  };
 
   const ibgeSelecionado = MUNICIPIOS.find((m) => m.ibge === form.codigo_municipio_ibge);
 
@@ -69,7 +107,7 @@ export default function EmpresaPage() {
         {/* Identificação */}
         <div className="card space-y-4">
           <h2 className="font-semibold text-gray-800">Identificação</h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="label">CNPJ *</label>
               <input className="input" value={form.cnpj} onChange={(e) => set("cnpj", e.target.value)} placeholder="00.000.000/0001-00" />
@@ -87,7 +125,7 @@ export default function EmpresaPage() {
             <label className="label">Nome Fantasia</label>
             <input className="input" value={form.nome_fantasia} onChange={(e) => set("nome_fantasia", e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="label">Inscrição Estadual</label>
               <input className="input" value={form.inscricao_estadual} onChange={(e) => set("inscricao_estadual", e.target.value)} placeholder="Isento ou número" />
@@ -121,7 +159,7 @@ export default function EmpresaPage() {
               <input className="input" value={form.codigo_municipio_ibge} onChange={(e) => set("codigo_municipio_ibge", e.target.value)} placeholder="Ex: 4127700" />
             </div>
           )}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="label">CEP</label>
               <input className="input" value={form.cep} onChange={(e) => set("cep", e.target.value)} placeholder="85900-000" />
@@ -135,7 +173,7 @@ export default function EmpresaPage() {
             <label className="label">Logradouro</label>
             <input className="input" value={form.logradouro} onChange={(e) => set("logradouro", e.target.value)} placeholder="Rua / Avenida..." />
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <label className="label">Número</label>
               <input className="input" value={form.numero} onChange={(e) => set("numero", e.target.value)} />
@@ -158,7 +196,7 @@ export default function EmpresaPage() {
         {/* Contato */}
         <div className="card space-y-4">
           <h2 className="font-semibold text-gray-800">Contato</h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="label">Email</label>
               <input className="input" type="email" value={form.email_contato} onChange={(e) => set("email_contato", e.target.value)} />
@@ -173,7 +211,7 @@ export default function EmpresaPage() {
         {/* NFS-e */}
         <div className="card space-y-4">
           <h2 className="font-semibold text-gray-800">Configurações NFS-e</h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="label">Login NFS-e / Inscrição Municipal</label>
               <input className="input" value={form.nfse_login} onChange={(e) => set("nfse_login", e.target.value)} placeholder="Mesmo que insc. municipal" />
@@ -183,14 +221,14 @@ export default function EmpresaPage() {
               <input className="input" type="password" value={form.nfse_password} onChange={(e) => set("nfse_password", e.target.value)} />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <label className="label">Código de Serviço padrão</label>
-              <input className="input" value={form.codigo_servico_padrao} onChange={(e) => set("codigo_servico_padrao", e.target.value)} placeholder="14.01" />
+              <input className="input" value={form.codigo_servico_padrao} onChange={(e) => set("codigo_servico_padrao", e.target.value)} placeholder="Consulte seu contador" />
             </div>
             <div>
               <label className="label">CNAE padrão</label>
-              <input className="input" value={form.cnae_padrao} onChange={(e) => set("cnae_padrao", e.target.value)} placeholder="4520007" />
+              <input className="input" value={form.cnae_padrao} onChange={(e) => set("cnae_padrao", e.target.value)} placeholder="Consulte seu contador" />
             </div>
             <div>
               <label className="label">Alíquota ISS padrão (%)</label>
@@ -220,6 +258,49 @@ export default function EmpresaPage() {
           {isPending ? "Salvando..." : "Salvar dados"}
         </button>
       </form>
+
+      {/* Certificado Digital */}
+      <div className="card space-y-4">
+        <h2 className="font-semibold text-gray-800">Certificado Digital (.pfx)</h2>
+        <p className="text-sm text-gray-500">
+          Necessário para emissão de notas em Toledo e Guaíra. Envie após salvar os dados da empresa acima.
+        </p>
+        <div>
+          <label className="label">Arquivo .pfx</label>
+          <input
+            type="file"
+            accept=".pfx"
+            onChange={(e) => { setCertFile(e.target.files?.[0] || null); setCertSuccess(false); setCertError(null); }}
+            className="input"
+          />
+        </div>
+        <div>
+          <label className="label">Senha do Certificado</label>
+          <input
+            type="password"
+            value={certPassword}
+            onChange={(e) => setCertPassword(e.target.value)}
+            placeholder="Senha do certificado"
+            className="input"
+          />
+        </div>
+        {certError && (
+          <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{certError}</p>
+        )}
+        {certSuccess && (
+          <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg flex items-center gap-2">
+            <CheckCircle size={16} /> Certificado enviado com sucesso!
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={handleUploadCert}
+          disabled={certUploading || !certFile || !certPassword}
+          className="btn-primary"
+        >
+          {certUploading ? "Enviando..." : "Enviar Certificado"}
+        </button>
+      </div>
     </div>
   );
 }

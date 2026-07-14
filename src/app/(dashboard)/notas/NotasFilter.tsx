@@ -14,44 +14,59 @@ function getMeses() {
   return meses;
 }
 
-export default function NotasFilter({ mesAtual, statusAtual }: { mesAtual: string; statusAtual: string }) {
+export default function NotasFilter({ mesAtual, statusAtual, ambienteAtual }: { mesAtual: string; statusAtual: string; ambienteAtual: string }) {
   const router = useRouter();
   const meses = getMeses();
 
-  function update(mes: string, status: string) {
+  function update(mes: string, status: string, ambiente: string) {
     const params = new URLSearchParams();
     if (mes) params.set("mes", mes);
     if (status) params.set("status", status);
+    if (ambiente) params.set("ambiente", ambiente);
     router.push(`/notas?${params.toString()}`);
   }
 
   return (
-    <div className="flex flex-wrap gap-3 items-end">
-      <div>
-        <label className="label">Mês</label>
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="min-w-0">
+        <label className="mb-1 block text-xs font-medium text-gray-700">Mes</label>
         <select
-          className="input w-48"
+          className="input h-10 px-2 text-sm"
           value={mesAtual}
-          onChange={(e) => update(e.target.value, statusAtual)}
+          onChange={(e) => update(e.target.value, statusAtual, ambienteAtual)}
         >
           <option value="">Todos os meses</option>
-          {meses.map((m) => (
-            <option key={m.val} value={m.val}>{m.label}</option>
+          {meses.map((mes) => (
+            <option key={mes.val} value={mes.val}>{mes.label}</option>
           ))}
         </select>
       </div>
-      <div>
-        <label className="label">Status</label>
+
+      <div className="min-w-0">
+        <label className="mb-1 block text-xs font-medium text-gray-700">Status</label>
         <select
-          className="input w-44"
+          className="input h-10 px-2 text-sm"
           value={statusAtual}
-          onChange={(e) => update(mesAtual, e.target.value)}
+          onChange={(e) => update(mesAtual, e.target.value, ambienteAtual)}
         >
           <option value="">Todos</option>
           <option value="authorized">Autorizada</option>
           <option value="processing">Processando</option>
           <option value="error">Erro</option>
           <option value="cancelled">Cancelada</option>
+        </select>
+      </div>
+
+      <div className="min-w-0">
+        <label className="mb-1 block text-xs font-medium text-gray-700">Ambiente</label>
+        <select
+          className="input h-10 px-2 text-sm"
+          value={ambienteAtual}
+          onChange={(e) => update(mesAtual, statusAtual, e.target.value)}
+        >
+          <option value="production">Somente producao</option>
+          <option value="all">Todos (producao + homologacao)</option>
+          <option value="homologation">Somente homologacao</option>
         </select>
       </div>
     </div>
