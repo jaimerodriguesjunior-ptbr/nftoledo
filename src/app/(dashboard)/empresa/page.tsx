@@ -26,6 +26,7 @@ export default function EmpresaPage() {
   const [certFile, setCertFile] = useState<File | null>(null);
   const [certPassword, setCertPassword] = useState("");
   const [certUploading, setCertUploading] = useState(false);
+  const [certReading, setCertReading] = useState(false);
   const [certError, setCertError] = useState<string | null>(null);
   const [certSuccess, setCertSuccess] = useState(false);
 
@@ -57,10 +58,45 @@ export default function EmpresaPage() {
         regime_tributario: form.regime_tributario,
       });
       if (result?.error) setError(result.error);
-      else if (result?.syncError) setError(`Dados salvos, mas a sincronização fiscal falhou: ${result.syncError}`);
       else setSuccess(true);
     });
   }
+
+  const handleParseCert = async () => {
+    if (!certFile || !certPassword) {
+      setCertError("Selecione o arquivo .pfx e informe a senha do certificado para ler os dados.");
+      return;
+    }
+    setCertReading(true);
+    setCertError(null);
+    setCertSuccess(false);
+    try {
+      const fd = new FormData();
+      fd.append("file", certFile);
+      fd.append("password", certPassword);
+
+      const res = await fetch("/api/fiscal/certificado/ler", { method: "POST", body: fd });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Erro ao ler o certificado");
+      }
+      
+      const data = await res.json();
+      
+      setForm((prev) => ({
+        ...prev,
+        cnpj: data.cnpj || prev.cnpj,
+        razao_social: data.razaoSocial || prev.razao_social,
+      }));
+      
+      setCertSuccess(true);
+      setCertError(null);
+    } catch (e: unknown) {
+      setCertError(e instanceof Error ? e.message : "Erro desconhecido");
+    } finally {
+      setCertReading(false);
+    }
+  };
 
   const handleUploadCert = async () => {
     if (!certFile || !form.cnpj || !certPassword) {
@@ -93,6 +129,7 @@ export default function EmpresaPage() {
   };
 
   const ibgeSelecionado = MUNICIPIOS.find((m) => m.ibge === form.codigo_municipio_ibge);
+  const isGuaira = form.codigo_municipio_ibge === "4108809";
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -213,12 +250,12 @@ export default function EmpresaPage() {
           <h2 className="font-semibold text-gray-800">Configurações NFS-e</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="label">Login NFS-e / Inscrição Municipal</label>
-              <input className="input" value={form.nfse_login} onChange={(e) => set("nfse_login", e.target.value)} placeholder="Mesmo que insc. municipal" />
+              <label className="label">Login da prefeitura {isGuaira ? "*" : "(não utilizado em Toledo)"}</label>
+              <input className="input" value={form.nfse_login} onChange={(e) => set("nfse_login", e.target.value)} required={isGuaira} disabled={!isGuaira} placeholder={isGuaira ? "Login da prefeitura" : "Não utilizado em Toledo"} />
             </div>
             <div>
-              <label className="label">Senha NFS-e</label>
-              <input className="input" type="password" value={form.nfse_password} onChange={(e) => set("nfse_password", e.target.value)} />
+              <label className="label">Senha da prefeitura {isGuaira ? "*" : "(não utilizada em Toledo)"}</label>
+              <input className="input" type="password" value={form.nfse_password} onChange={(e) => set("nfse_password", e.target.value)} required={isGuaira} disabled={!isGuaira} placeholder={isGuaira ? "Senha da prefeitura" : "Não utilizada em Toledo"} />
             </div>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -263,7 +300,7 @@ export default function EmpresaPage() {
       <div className="card space-y-4">
         <h2 className="font-semibold text-gray-800">Certificado Digital (.pfx)</h2>
         <p className="text-sm text-gray-500">
-          Necessário para emissão de notas em Toledo e Guaíra. Envie após salvar os dados da empresa acima.
+          Necessário para emissão de NFS-e em Toledo. Em Guaíra, a autenticação é feita com login e senha da prefeitura.
         </p>
         <div>
           <label className="label">Arquivo .pfx</label>
@@ -289,17 +326,27 @@ export default function EmpresaPage() {
         )}
         {certSuccess && (
           <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg flex items-center gap-2">
-            <CheckCircle size={16} /> Certificado enviado com sucesso!
+            <CheckCircle size={16} /> Ação realizada com sucesso!
           </p>
         )}
-        <button
-          type="button"
-          onClick={handleUploadCert}
-          disabled={certUploading || !certFile || !certPassword}
-          className="btn-primary"
-        >
-          {certUploading ? "Enviando..." : "Enviar Certificado"}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={handleParseCert}
+            disabled={certReading || certUploading || !certFile || !certPassword || isGuaira}
+            className="btn-secondary"
+          >
+            {certReading ? "Lendo..." : "Autopreencher dados"}
+          </button>
+          <button
+            type="button"
+            onClick={handleUploadCert}
+            disabled={certReading || certUploading || !certFile || !certPassword || isGuaira}
+            className="btn-primary"
+          >
+            {isGuaira ? "Não utilizado em Guaíra" : certUploading ? "Enviando..." : "Enviar Certificado"}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -324,11 +324,6 @@ export async function emitirNFSe(params: EmitirParams) {
           codigo_ibge: ibgeMunicipio,
           nome: company.cidade || "Toledo",
         },
-        prefeitura: {
-          login: company.nfse_login || cnpj,
-          senha: company.nfse_password || undefined,
-          inscricao_municipal: inscricaoMunicipal,
-        },
         rps: {
           serie: "1",
           emissor: "1",

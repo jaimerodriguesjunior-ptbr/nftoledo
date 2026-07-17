@@ -41,27 +41,37 @@ export async function saveCompany(data: Record<string, unknown>) {
     updated_at: new Date().toISOString(),
   };
 
+  const syncResults = await Promise.all(
+    (["production", "homologation"] as const).map(async (environment) => ({
+      environment,
+      result: await syncCompanyWithLocalFiscal({
+        organizationId: orgId,
+        ...settings,
+        environment,
+      }),
+    }))
+  );
+  const syncFailure = syncResults.find(({ result }) => !result.ok);
+  if (syncFailure && !syncFailure.result.ok) {
+    return {
+      error:
+        `A empresa não foi salva porque a sincronização fiscal falhou em ${syncFailure.environment}: ` +
+        syncFailure.result.message,
+    };
+  }
+
   const { error } = await supabase.from("company_settings").upsert(
-    settings,
+    {
+      ...settings,
+      local_fiscal_sync_status: "success",
+      local_fiscal_sync_message: null,
+      local_fiscal_last_sync_at: new Date().toISOString(),
+    },
     { onConflict: "organization_id" }
   );
 
   if (error) return { error: error.message };
 
-  const sync = await syncCompanyWithLocalFiscal({
-    organizationId: orgId,
-    ...settings,
-  });
-
-  await supabase
-    .from("company_settings")
-    .update({
-      local_fiscal_sync_status: sync.ok ? "success" : "error",
-      local_fiscal_sync_message: sync.ok ? null : sync.message,
-      local_fiscal_last_sync_at: new Date().toISOString(),
-    })
-    .eq("organization_id", orgId);
-
   revalidatePath("/empresa");
-  return { success: true, syncError: sync.ok ? undefined : sync.message };
+  return { success: true };
 }

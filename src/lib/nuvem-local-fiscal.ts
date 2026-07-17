@@ -18,6 +18,11 @@ type CompanyData = {
   bairro?: unknown;
   email_contato?: unknown;
   environment?: unknown;
+  nfse_login?: unknown;
+  nfse_password?: unknown;
+  cnae_padrao?: unknown;
+  codigo_servico_padrao?: unknown;
+  aliquota_iss_padrao?: unknown;
 };
 
 type SyncResult = { ok: true } | { ok: false; message: string };
@@ -91,6 +96,69 @@ export async function syncCompanyWithLocalFiscal(data: CompanyData): Promise<Syn
 
     if (!response.ok) {
       return { ok: false, message: await errorMessage(response) };
+    }
+
+    const municipalityCode = String(data.codigo_municipio_ibge ?? "").replace(/\D/g, "");
+    const inscricaoMunicipal = text(data.inscricao_municipal);
+    const serviceCode = text(data.codigo_servico_padrao);
+    const cnae = text(data.cnae_padrao);
+    const issRate = Number(data.aliquota_iss_padrao);
+    const ambiente = environment === "production" ? "producao" : "homologacao";
+
+    if (municipalityCode === "4108809") {
+      const login = text(data.nfse_login);
+      const password = text(data.nfse_password);
+      if (!login || !password) {
+        return { ok: false, message: "Informe login e senha da prefeitura para a NFS-e de Guaira." };
+      }
+
+      const nfseResponse = await fetch(`${baseUrl}/empresas/${cnpj}/nfse`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ambiente,
+          provedor: "guaira-ipm",
+          municipio: { codigo_ibge: "4108809", nome: text(data.cidade) || "Guaira" },
+          prefeitura: { login, senha: password, inscricao_municipal: inscricaoMunicipal },
+          rps: { serie: "1" },
+          ipm: {
+            cadastro_economico: inscricaoMunicipal,
+            codigo_atividade: cnae,
+            codigo_tom: "7571",
+            situacao_tributaria: "0",
+            modo_teste: false
+          },
+          servico: { codigo: serviceCode, codigo_atividade: cnae, aliquota_iss: issRate },
+          transmissao_automatica: true
+        }),
+        cache: "no-store"
+      });
+      if (!nfseResponse.ok) return { ok: false, message: await errorMessage(nfseResponse) };
+    } else if (municipalityCode === "4127700") {
+      if (!inscricaoMunicipal) {
+        return { ok: false, message: "Informe a inscricao municipal para a NFS-e de Toledo." };
+      }
+
+      const nfseResponse = await fetch(`${baseUrl}/empresas/${cnpj}/nfse`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ambiente,
+          provedor: "toledo-equiplano",
+          municipio: { codigo_ibge: "4127700", nome: text(data.cidade) || "Toledo" },
+          prefeitura: { inscricao_municipal: inscricaoMunicipal },
+          rps: { serie: "1", emissor: "1" },
+          equiplano: {
+            inscricao_municipal: inscricaoMunicipal,
+            id_entidade: "136",
+            request_format: "soap"
+          },
+          servico: { codigo: serviceCode, codigo_atividade: cnae, aliquota_iss: issRate },
+          transmissao_automatica: true
+        }),
+        cache: "no-store"
+      });
+      if (!nfseResponse.ok) return { ok: false, message: await errorMessage(nfseResponse) };
     }
 
     return { ok: true };
