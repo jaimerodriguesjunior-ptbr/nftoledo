@@ -168,6 +168,11 @@ export async function getClientsForBatch(mesReferencia: string, environment?: "p
             }
           : null,
       };
+    })
+    .sort((left, right) => {
+      const serviceOrder = Number(Boolean(right.batch_service)) - Number(Boolean(left.batch_service));
+      if (serviceOrder !== 0) return serviceOrder;
+      return left.nome.localeCompare(right.nome, "pt-BR");
     });
 
   return {
