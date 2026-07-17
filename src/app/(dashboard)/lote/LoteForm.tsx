@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getClientsForBatch, saveClientBatchService } from "@/actions/clientes";
 import { emitirNFSe } from "@/actions/fiscal";
 import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
@@ -180,6 +181,7 @@ export default function LoteForm({
   initialSpecialKey?: string | null;
   isSpecialMode?: boolean;
 }) {
+  const router = useRouter();
   const [mes, setMes] = useState(initialMes);
   const [environment, setEnvironment] = useState(initialEnvironment || empresa.environment || "production");
   const [rows, setRows] = useState<Row[]>(() => buildRows(initialClientes));
@@ -372,31 +374,38 @@ export default function LoteForm({
 
       updateRow(row.client.id, { status: "loading", error: undefined });
 
-      const saved = await saveClientBatchService({
-        clientId: row.client.id,
-        descricao,
-        valorMensal: valor,
-      });
+      try {
+        const saved = await saveClientBatchService({
+          clientId: row.client.id,
+          descricao,
+          valorMensal: valor,
+          skipRevalidation: true,
+        });
 
-      if (saved?.error) {
-        updateRow(row.client.id, { status: "error", error: saved.error });
-        return { success: false, error: saved.error };
+        if (saved?.error) {
+          updateRow(row.client.id, { status: "error", error: saved.error });
+          return { success: false, error: saved.error };
+        }
+
+        const res = await emitirNFSe({
+          clientId: row.client.id,
+          descricao,
+          valor,
+          environment: environment as "production" | "homologation",
+          mesReferencia: mes,
+          emissionOrigin: "batch",
+        });
+
+        updateRow(row.client.id, {
+          status: res.success ? "success" : "error",
+          error: res.success ? undefined : res.error,
+        });
+        return { success: res.success, error: res.error };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Nao foi possivel emitir esta nota.";
+        updateRow(row.client.id, { status: "error", error: message });
+        return { success: false, error: message };
       }
-
-      const res = await emitirNFSe({
-        clientId: row.client.id,
-        descricao,
-        valor,
-        environment: environment as "production" | "homologation",
-        mesReferencia: mes,
-        emissionOrigin: "batch",
-      });
-
-      updateRow(row.client.id, {
-        status: res.success ? "success" : "error",
-        error: res.success ? undefined : res.error,
-      });
-      return { success: res.success, error: res.error };
     };
 
     // Throttle: emite uma nota por vez, aguardando RETRY_DELAY_MS entre cada
@@ -425,6 +434,7 @@ export default function LoteForm({
     }
 
     setIsRunning(false);
+    router.push(`/notas?mes=${encodeURIComponent(mes)}&ambiente=${encodeURIComponent(environment)}`);
   }
 
   const allVisibleSelected = visibleRows.length > 0 && visibleRows.every((row) => row.selected);

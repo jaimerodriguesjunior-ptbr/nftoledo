@@ -229,9 +229,6 @@ export async function emitirNFSe(params: EmitirParams) {
     const companyCep = onlyDigits(company.cep);
     const companyCepToSend = companyCep.length === 8 ? companyCep : defaultMunicipioCep;
 
-    if (!isToledo && !company.nfse_login) {
-      throw new Error("Login/senha da prefeitura não configurados. Acesse Minha Empresa.");
-    }
     if (isToledo && !inscricaoMunicipal) {
       throw new Error("Inscrição municipal não configurada para Toledo. Acesse Minha Empresa.");
     }

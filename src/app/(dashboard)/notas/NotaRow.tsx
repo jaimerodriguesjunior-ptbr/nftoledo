@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { cancelarNFSe, consultarNFSe } from "@/actions/fiscal";
 import { AlertCircle, Ban, ExternalLink, FileDown, RefreshCw, X } from "lucide-react";
 
@@ -134,21 +134,6 @@ export default function NotaRow({
       }
     });
   }
-
-  const consultarStable = useCallback(() => {
-    consultar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nota.id]);
-
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (status === "processing") {
-      interval = setInterval(() => {
-        consultarStable();
-      }, 10000);
-    }
-    return () => clearInterval(interval);
-  }, [consultarStable, status]);
 
   function cancelar() {
     const confirmed = window.confirm("Tem certeza que deseja cancelar esta nota?");

@@ -129,8 +129,6 @@ export default function EmpresaPage() {
   };
 
   const ibgeSelecionado = MUNICIPIOS.find((m) => m.ibge === form.codigo_municipio_ibge);
-  const isGuaira = form.codigo_municipio_ibge === "4108809";
-
   return (
     <div className="max-w-2xl space-y-6">
       <div>
@@ -250,12 +248,12 @@ export default function EmpresaPage() {
           <h2 className="font-semibold text-gray-800">Configurações NFS-e</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="label">Login da prefeitura {isGuaira ? "*" : "(não utilizado em Toledo)"}</label>
-              <input className="input" value={form.nfse_login} onChange={(e) => set("nfse_login", e.target.value)} required={isGuaira} disabled={!isGuaira} placeholder={isGuaira ? "Login da prefeitura" : "Não utilizado em Toledo"} />
+              <label className="label">Login da prefeitura (opcional)</label>
+              <input className="input" value={form.nfse_login} onChange={(e) => set("nfse_login", e.target.value)} placeholder="Login da prefeitura, se aplicável" />
             </div>
             <div>
-              <label className="label">Senha da prefeitura {isGuaira ? "*" : "(não utilizada em Toledo)"}</label>
-              <input className="input" type="password" value={form.nfse_password} onChange={(e) => set("nfse_password", e.target.value)} required={isGuaira} disabled={!isGuaira} placeholder={isGuaira ? "Senha da prefeitura" : "Não utilizada em Toledo"} />
+              <label className="label">Senha da prefeitura (opcional)</label>
+              <input className="input" type="password" value={form.nfse_password} onChange={(e) => set("nfse_password", e.target.value)} placeholder="Senha da prefeitura, se aplicável" />
             </div>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -300,7 +298,7 @@ export default function EmpresaPage() {
       <div className="card space-y-4">
         <h2 className="font-semibold text-gray-800">Certificado Digital (.pfx)</h2>
         <p className="text-sm text-gray-500">
-          Necessário para emissão de NFS-e em Toledo. Em Guaíra, a autenticação é feita com login e senha da prefeitura.
+          Opcional conforme a prefeitura. O certificado pode ser usado também em Guaíra; em Toledo, login e senha não são obrigatórios.
         </p>
         <div>
           <label className="label">Arquivo .pfx</label>
@@ -333,7 +331,7 @@ export default function EmpresaPage() {
           <button
             type="button"
             onClick={handleParseCert}
-            disabled={certReading || certUploading || !certFile || !certPassword || isGuaira}
+            disabled={certReading || certUploading || !certFile || !certPassword}
             className="btn-secondary"
           >
             {certReading ? "Lendo..." : "Autopreencher dados"}
@@ -341,10 +339,10 @@ export default function EmpresaPage() {
           <button
             type="button"
             onClick={handleUploadCert}
-            disabled={certReading || certUploading || !certFile || !certPassword || isGuaira}
+            disabled={certReading || certUploading || !certFile || !certPassword}
             className="btn-primary"
           >
-            {isGuaira ? "Não utilizado em Guaíra" : certUploading ? "Enviando..." : "Enviar Certificado"}
+            {certUploading ? "Enviando..." : "Enviar Certificado"}
           </button>
         </div>
       </div>

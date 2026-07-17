@@ -108,9 +108,10 @@ export async function syncCompanyWithLocalFiscal(data: CompanyData): Promise<Syn
     if (municipalityCode === "4108809") {
       const login = text(data.nfse_login);
       const password = text(data.nfse_password);
-      if (!login || !password) {
-        return { ok: false, message: "Informe login e senha da prefeitura para a NFS-e de Guaira." };
-      }
+      const prefeitura = {
+        ...(login && password ? { login, senha: password } : {}),
+        inscricao_municipal: inscricaoMunicipal,
+      };
 
       const nfseResponse = await fetch(`${baseUrl}/empresas/${cnpj}/nfse`, {
         method: "PUT",
@@ -119,7 +120,7 @@ export async function syncCompanyWithLocalFiscal(data: CompanyData): Promise<Syn
           ambiente,
           provedor: "guaira-ipm",
           municipio: { codigo_ibge: "4108809", nome: text(data.cidade) || "Guaira" },
-          prefeitura: { login, senha: password, inscricao_municipal: inscricaoMunicipal },
+          prefeitura,
           rps: { serie: "1" },
           ipm: {
             cadastro_economico: inscricaoMunicipal,

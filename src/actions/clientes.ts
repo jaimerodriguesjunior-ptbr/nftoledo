@@ -279,6 +279,7 @@ export async function saveClientBatchService(data: {
   codigoServico?: string | null;
   cnae?: string | null;
   aliquotaIss?: number | null;
+  skipRevalidation?: boolean;
 }) {
   const { supabase, orgId } = await getOrgId();
   if (!orgId) return { error: "Organizacao nao encontrada" };
@@ -329,8 +330,10 @@ export async function saveClientBatchService(data: {
     if (error) return { error: error.message };
   }
 
-  revalidatePath("/lote");
-  revalidatePath("/clientes");
+  if (!data.skipRevalidation) {
+    revalidatePath("/lote");
+    revalidatePath("/clientes");
+  }
   return { success: true };
 }
 
