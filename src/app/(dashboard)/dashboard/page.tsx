@@ -29,7 +29,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="page-title">Inicio</h1>
+        <h1 className="page-title">Início</h1>
         <p className="page-subtitle">
           {new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
         </p>
@@ -57,8 +57,8 @@ export default async function DashboardPage() {
             <ListOrdered size={22} className="text-white" />
           </div>
           <div>
-            <p className="font-semibold text-gray-900">Emissao em Lote</p>
-            <p className="text-sm text-gray-500">Emitir todas as notas do mes</p>
+            <p className="font-semibold text-gray-900">Emissão em Lote</p>
+            <p className="text-sm text-gray-500">Emitir todas as notas do mês</p>
           </div>
         </Link>
       </div>
@@ -70,7 +70,7 @@ export default async function DashboardPage() {
           </div>
           <div>
             <p className="text-2xl font-bold text-gray-900">{stats.notasNoMes}</p>
-            <p className="text-sm text-gray-500">Notas no mes</p>
+            <p className="text-sm text-gray-500">Notas no mês</p>
           </div>
         </div>
 
@@ -117,7 +117,7 @@ export default async function DashboardPage() {
                 <div key={nota.id} className="flex items-center justify-between border-b border-gray-100 py-2 last:border-0">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-gray-900">
-                      {nota.clients?.nome || "Cliente nao encontrado"}
+                      {nota.clients?.nome || "Cliente não encontrado"}
                     </p>
                     <p className="truncate text-xs text-gray-500">{nota.descricao_servico}</p>
                   </div>

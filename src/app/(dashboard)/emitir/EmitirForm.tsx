@@ -48,12 +48,12 @@ export default function EmitirForm({ clientes, empresa }: { clientes: Client[]; 
 
     const valorNum = parseFloat(valor.replace(",", "."));
     if (!valorNum || valorNum <= 0) {
-      setResult({ success: false, error: "Informe um valor valido." });
+      setResult({ success: false, error: "Informe um valor válido." });
       return;
     }
 
     if (!empresa.codigo_servico_padrao?.trim()) {
-      setResult({ success: false, error: "Configure o codigo de servico em Minha Empresa antes de emitir." });
+      setResult({ success: false, error: "Configure o código de serviço em Minha Empresa antes de emitir." });
       return;
     }
 
@@ -95,13 +95,13 @@ export default function EmitirForm({ clientes, empresa }: { clientes: Client[]; 
       </div>
 
       <div>
-        <label className="label">Descricao do servico *</label>
+        <label className="label">Descrição do serviço *</label>
         <input
           className="input"
           value={descricao}
           onChange={(e) => setDescricao(e.target.value)}
           required
-          placeholder="Ex: Consultoria contabil - Abril/2026"
+          placeholder="Ex: Consultoria contábil - Abril/2026"
         />
       </div>
 
@@ -119,8 +119,8 @@ export default function EmitirForm({ clientes, empresa }: { clientes: Client[]; 
       <div>
         <label className="label">Ambiente</label>
         <select className="input" value={environment} onChange={(e) => setEnvironment(e.target.value)}>
-          <option value="production">Producao</option>
-          <option value="homologation">Homologacao (testes)</option>
+          <option value="production">Produção</option>
+          <option value="homologation">Homologação (testes)</option>
         </select>
       </div>
 

@@ -17,10 +17,10 @@ import {
 import { logout } from "@/actions/auth";
 
 const navItems = [
-  { href: "/dashboard", label: "Inicio", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Início", icon: LayoutDashboard },
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/emitir", label: "Emitir Nota", icon: FilePlus },
-  { href: "/lote", label: "Emissao em Lote", icon: ListOrdered },
+  { href: "/lote", label: "Emissão em Lote", icon: ListOrdered },
   { href: "/notas", label: "Notas Emitidas", icon: FileText },
   { href: "/empresa", label: "Minha Empresa", icon: Building2 },
 ];
@@ -32,7 +32,7 @@ export default function Sidebar() {
   const navContent = (
     <>
       <div className="px-6 py-5 border-b border-gray-100">
-        <span className="text-xl font-bold text-blue-600">NF Facil</span>
+        <span className="text-xl font-bold text-blue-600">NF Fácil</span>
         <p className="text-xs text-gray-400 mt-0.5">Emissor de NFS-e</p>
       </div>
 
@@ -78,7 +78,7 @@ export default function Sidebar() {
     <>
       <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4 md:hidden">
         <div>
-          <p className="text-base font-bold text-blue-600">NF Facil</p>
+          <p className="text-base font-bold text-blue-600">NF Fácil</p>
           <p className="text-[11px] text-gray-400">Emissor de NFS-e</p>
         </div>
         <button

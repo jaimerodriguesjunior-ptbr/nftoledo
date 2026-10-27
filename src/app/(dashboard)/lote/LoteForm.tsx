@@ -260,7 +260,7 @@ export default function LoteForm({
 
     loadMonth().catch((error) => {
       if (!active) return;
-      setFormError(error instanceof Error ? error.message : "Nao foi possivel carregar os clientes do mes.");
+      setFormError(error instanceof Error ? error.message : "Não foi possível carregar os clientes do mês.");
       setIsLoadingMonth(false);
     });
 
@@ -320,7 +320,7 @@ export default function LoteForm({
 
         if (!hasValidCpfOrCnpj(row.client.cpf_cnpj)) {
           hasError = true;
-          return { ...row, status: "error", error: "CPF/CNPJ ausente ou invalido." };
+          return { ...row, status: "error", error: "CPF/CNPJ ausente ou inválido." };
         }
 
         return { ...row, status: row.status === "success" ? "success" : "idle", error: undefined };
@@ -360,7 +360,7 @@ export default function LoteForm({
     const processEmission = async (row: Row) => {
       const valor = parseMoney(row.valor);
       const service = row.client.batch_service;
-      const descricao = row.preferredDescricao || service?.descricao?.trim() || `Servicos mensais - ${mesLabel(mes)}`;
+      const descricao = row.preferredDescricao || service?.descricao?.trim() || `Serviços mensais - ${mesLabel(mes)}`;
 
       updateRow(row.client.id, { status: "loading", error: undefined });
 
@@ -392,7 +392,7 @@ export default function LoteForm({
         });
         return { success: res.success, error: res.error };
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Nao foi possivel emitir esta nota.";
+        const message = error instanceof Error ? error.message : "Não foi possível emitir esta nota.";
         updateRow(row.client.id, { status: "error", error: message });
         return { success: false, error: message };
       }
@@ -421,7 +421,7 @@ export default function LoteForm({
     <div className="space-y-4">
       <div className="card grid grid-cols-2 gap-3 p-4">
         <div className="min-w-0">
-          <label className="mb-1 block text-xs font-medium text-gray-700">Mes de referencia</label>
+          <label className="mb-1 block text-xs font-medium text-gray-700">Mês de referência</label>
           <select className="input h-10 px-2 text-sm" value={mes} onChange={(event) => setMes(event.target.value)} disabled={isRunning}>
             {getMeses().map((item) => (
               <option key={item} value={item}>{mesLabel(item)}</option>
@@ -477,7 +477,7 @@ export default function LoteForm({
                     }}
                     disabled={isRunning || isLoadingMonth}
                   />
-                  Selecionar visiveis
+                  Selecionar visíveis
                 </label>
 
                 <label className="flex items-center gap-2 text-xs text-gray-600">
@@ -525,7 +525,7 @@ export default function LoteForm({
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-gray-900">{row.client.nome}</p>
                         <p className={`text-xs ${docInvalid ? "text-red-600" : "text-gray-500"}`}>
-                          {row.client.cpf_cnpj || "CPF/CNPJ nao informado"}
+                          {row.client.cpf_cnpj || "CPF/CNPJ não informado"}
                         </p>
                         {row.error && <p className="mt-1 text-xs text-red-600">{row.error}</p>}
                       </div>

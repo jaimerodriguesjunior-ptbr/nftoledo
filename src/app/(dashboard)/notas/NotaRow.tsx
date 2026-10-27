@@ -116,7 +116,7 @@ export default function NotaRow({
   const dataEmissao = nota.data_emissao || nota.created_at;
   const dataFmt = dataEmissao ? new Date(dataEmissao).toLocaleDateString("pt-BR") : "-";
   const valorFmt = (nota.valor_total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  const cliente = nota.clients?.nome || "Cliente nao encontrado";
+  const cliente = nota.clients?.nome || "Cliente não encontrado";
   const descricao = nota.descricao_servico || "-";
 
   function consultar() {

@@ -29,7 +29,7 @@ export default function NotasFilter({ mesAtual, statusAtual, ambienteAtual }: { 
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
       <div className="min-w-0">
-        <label className="mb-1 block text-xs font-medium text-gray-700">Mes</label>
+        <label className="mb-1 block text-xs font-medium text-gray-700">Mês</label>
         <select
           className="input h-10 px-2 text-sm"
           value={mesAtual}
@@ -64,9 +64,9 @@ export default function NotasFilter({ mesAtual, statusAtual, ambienteAtual }: { 
           value={ambienteAtual}
           onChange={(e) => update(mesAtual, statusAtual, e.target.value)}
         >
-          <option value="production">Somente producao</option>
-          <option value="all">Todos (producao + homologacao)</option>
-          <option value="homologation">Somente homologacao</option>
+          <option value="production">Somente produção</option>
+          <option value="all">Todos (produção + homologação)</option>
+          <option value="homologation">Somente homologação</option>
         </select>
       </div>
     </div>

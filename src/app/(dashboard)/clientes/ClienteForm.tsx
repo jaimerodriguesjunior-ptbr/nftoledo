@@ -72,7 +72,7 @@ export default function ClienteForm({ initial }: { initial?: InitialData }) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.nome.trim()) {
-      setError("Nome e obrigatorio.");
+      setError("Nome é obrigatório.");
       return;
     }
 
@@ -103,7 +103,7 @@ export default function ClienteForm({ initial }: { initial?: InitialData }) {
           </div>
           <div>
             <label className="label">CPF / CNPJ</label>
-            <input className="input" value={form.cpf_cnpj} onChange={(e) => setField("cpf_cnpj", e.target.value)} placeholder="Somente numeros" />
+            <input className="input" value={form.cpf_cnpj} onChange={(e) => setField("cpf_cnpj", e.target.value)} placeholder="Somente números" />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -119,14 +119,14 @@ export default function ClienteForm({ initial }: { initial?: InitialData }) {
       </div>
 
       <div className="card space-y-4">
-        <h2 className="font-semibold text-gray-800">Endereco <span className="text-sm font-normal text-gray-400">(opcional)</span></h2>
+        <h2 className="font-semibold text-gray-800">Endereço <span className="text-sm font-normal text-gray-400">(opcional)</span></h2>
         <div className="grid grid-cols-3 gap-4">
           <div className="col-span-2">
             <label className="label">Logradouro</label>
             <input className="input" value={form.logradouro} onChange={(e) => setField("logradouro", e.target.value)} />
           </div>
           <div>
-            <label className="label">Numero</label>
+            <label className="label">Número</label>
             <input className="input" value={form.numero} onChange={(e) => setField("numero", e.target.value)} />
           </div>
         </div>
@@ -154,7 +154,7 @@ export default function ClienteForm({ initial }: { initial?: InitialData }) {
             <input className="input" value={form.uf} onChange={(e) => setField("uf", e.target.value)} maxLength={2} />
           </div>
           <div>
-            <label className="label">IBGE Municipio</label>
+            <label className="label">IBGE Município</label>
             <input className="input" value={form.codigo_municipio_ibge} onChange={(e) => setField("codigo_municipio_ibge", e.target.value)} placeholder="Ex: 4127700" />
           </div>
         </div>
@@ -163,8 +163,8 @@ export default function ClienteForm({ initial }: { initial?: InitialData }) {
       <div className="card space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="font-semibold text-gray-800">Servicos mensais</h2>
-            <p className="mt-0.5 text-xs text-gray-400">Para emissao em lote ou nota recorrente</p>
+            <h2 className="font-semibold text-gray-800">Serviços mensais</h2>
+            <p className="mt-0.5 text-xs text-gray-400">Para emissão em lote ou nota recorrente</p>
           </div>
           <button type="button" onClick={addService} className="btn-secondary flex items-center gap-1.5 py-1.5 text-xs">
             <Plus size={14} /> Adicionar
@@ -172,15 +172,15 @@ export default function ClienteForm({ initial }: { initial?: InitialData }) {
         </div>
 
         {services.length === 0 && (
-          <p className="text-sm text-gray-400">Nenhum servico mensal cadastrado.</p>
+          <p className="text-sm text-gray-400">Nenhum serviço mensal cadastrado.</p>
         )}
 
         {services.map((service, index) => (
           <div key={index} className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
-                <label className="label">Descricao do servico *</label>
-                <input className="input" value={service.descricao} onChange={(e) => setService(index, "descricao", e.target.value)} placeholder="Ex: Honorarios contabeis - abril/2026" />
+                <label className="label">Descrição do serviço *</label>
+                <input className="input" value={service.descricao} onChange={(e) => setService(index, "descricao", e.target.value)} placeholder="Ex: Honorários contábeis - abril/2026" />
               </div>
               <button type="button" onClick={() => removeService(index)} className="mt-6 rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500">
                 <Trash2 size={15} />

@@ -73,7 +73,7 @@ export default function EmpresaPage() {
       }
       const response = await fetch("/api/fiscal/cadastro", { method: "POST", body: fd });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Nao foi possivel concluir o cadastro.");
+      if (!response.ok) throw new Error(result.error || "Não foi possível concluir o cadastro.");
       setHasSavedCompany(true);
       setSuccess(true);
       if (result.certificateSent) {
@@ -82,7 +82,7 @@ export default function EmpresaPage() {
         setCertPassword("");
       }
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "Nao foi possivel concluir o cadastro.");
+      setError(error instanceof Error ? error.message : "Não foi possível concluir o cadastro.");
     }
   }
 
