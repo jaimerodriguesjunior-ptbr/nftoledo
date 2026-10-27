@@ -1,23 +1,22 @@
+import { getLocalFiscalBaseUrl } from "@/lib/local-fiscal-config";
 
-export async function getNuvemFiscalToken(environment: 'production' | 'homologation' = 'production') {
+export async function getNuvemFiscalToken(environment: 'production' | 'homologation' = 'production', scope = 'empresa nfse') {
     let clientId, clientSecret, authUrl;
 
     if (environment === 'production') {
         clientId = process.env.NUVEMFISCAL_PROD_CLIENT_ID;
         clientSecret = process.env.NUVEMFISCAL_PROD_CLIENT_SECRET;
-        const apiUrl = (process.env.NUVEMFISCAL_PROD_URL || "").replace(/\/+$/, "");
+        const apiUrl = getLocalFiscalBaseUrl(environment);
         authUrl =
             process.env.NUVEMFISCAL_PROD_AUTH_URL ||
-            (apiUrl && !apiUrl.includes("nuvemfiscal.com.br") ? `${apiUrl}/oauth/token` : "") ||
-            "https://auth.nuvemfiscal.com.br/oauth/token";
+            `${apiUrl}/oauth/token`;
     } else {
         clientId = process.env.NUVEMFISCAL_HOM_CLIENT_ID;
         clientSecret = process.env.NUVEMFISCAL_HOM_CLIENT_SECRET;
-        const apiUrl = (process.env.NUVEMFISCAL_HOM_URL || "").replace(/\/+$/, "");
+        const apiUrl = getLocalFiscalBaseUrl(environment);
         authUrl =
             process.env.NUVEMFISCAL_HOM_AUTH_URL ||
-            (apiUrl && !apiUrl.includes("nuvemfiscal.com.br") ? `${apiUrl}/oauth/token` : "") ||
-            "https://auth.nuvemfiscal.com.br/oauth/token";
+            `${apiUrl}/oauth/token`;
     }
 
     if (!clientId || !clientSecret) {
@@ -28,7 +27,7 @@ export async function getNuvemFiscalToken(environment: 'production' | 'homologat
     params.append('grant_type', 'client_credentials');
     params.append('client_id', clientId);
     params.append('client_secret', clientSecret);
-    params.append('scope', 'empresa nfce nfe nfse');
+    params.append('scope', scope);
 
     try {
         const response = await fetch(authUrl, {
@@ -40,9 +39,10 @@ export async function getNuvemFiscalToken(environment: 'production' | 'homologat
         });
 
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`[NuvemFiscal] Erro ao autenticar:`, errorText);
-            throw new Error(`Falha na autenticação (${response.status})`);
+            const body = await response.json().catch(() => ({}));
+            throw new Error(body.error === 'invalid_scope'
+                ? 'A integração não possui as permissões necessárias na Nuvem Local Fiscal.'
+                : `Falha na autenticação da Nuvem Local Fiscal (${response.status}).`);
         }
 
         const data = await response.json();

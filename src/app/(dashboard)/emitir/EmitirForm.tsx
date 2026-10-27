@@ -130,7 +130,7 @@ export default function EmitirForm({ clientes, empresa }: { clientes: Client[]; 
           <div>
             <p className="font-medium">Nota enviada com sucesso!</p>
             <p className="mt-0.5 text-green-600">
-              A nota esta sendo processada pela prefeitura. Acompanhe em <Link href="/notas" className="underline">Notas Emitidas</Link>.
+              A nota está em processamento no fluxo da SEFIN Nacional. Acompanhe em <Link href="/notas" className="underline">Notas Emitidas</Link>.
             </p>
           </div>
         </div>

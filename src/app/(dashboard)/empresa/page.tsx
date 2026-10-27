@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
-import { getCompany, saveCompany } from "@/actions/empresa";
+import { getCompany } from "@/actions/empresa";
 import { Building2, CheckCircle } from "lucide-react";
 
 
@@ -15,11 +15,12 @@ export default function EmpresaPage() {
     cnpj: "", razao_social: "", nome_fantasia: "", inscricao_municipal: "",
     inscricao_estadual: "", regime_tributario: "1", codigo_municipio_ibge: "4127700",
     cidade: "", uf: "", cep: "", logradouro: "", numero: "", complemento: "",
-    bairro: "", email_contato: "", telefone: "", nfse_login: "", nfse_password: "",
+    bairro: "", email_contato: "", telefone: "",
     cnae_padrao: "", codigo_servico_padrao: "",
     aliquota_iss_padrao: "3", environment: "production",
   });
   const [success, setSuccess] = useState(false);
+  const [hasSavedCompany, setHasSavedCompany] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -28,11 +29,12 @@ export default function EmpresaPage() {
   const [certUploading, setCertUploading] = useState(false);
   const [certReading, setCertReading] = useState(false);
   const [certError, setCertError] = useState<string | null>(null);
-  const [certSuccess, setCertSuccess] = useState(false);
+  const [certSuccess, setCertSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     getCompany().then((data) => {
       if (data) {
+        setHasSavedCompany(true);
         setForm((prev) => ({
           ...prev,
           ...Object.fromEntries(
@@ -48,18 +50,45 @@ export default function EmpresaPage() {
     setSuccess(false);
   };
 
+  async function persistRegistration() {
+    setError(null);
+    setSuccess(false);
+    setCertError(null);
+    if (!hasSavedCompany && !certFile) {
+      setError("Selecione o certificado e informe a senha para cadastrar sua empresa na Nuvem Local Fiscal.");
+      return;
+    }
+    if (certFile && !certPassword) {
+      setCertError("Informe a senha do certificado.");
+      return;
+    }
+    try {
+      const fd = new FormData();
+      fd.append("empresa", JSON.stringify({ ...form,
+        aliquota_iss_padrao: form.aliquota_iss_padrao.trim() ? Number(form.aliquota_iss_padrao) : null,
+      }));
+      if (certFile) {
+        fd.append("file", certFile);
+        fd.append("password", certPassword);
+      }
+      const response = await fetch("/api/fiscal/cadastro", { method: "POST", body: fd });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Nao foi possivel concluir o cadastro.");
+      setHasSavedCompany(true);
+      setSuccess(true);
+      if (result.certificateSent) {
+        setCertSuccess("Certificado recebido e validado pela Nuvem Local Fiscal.");
+        setCertFile(null);
+        setCertPassword("");
+      }
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "Nao foi possivel concluir o cadastro.");
+    }
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-    startTransition(async () => {
-      const result = await saveCompany({
-        ...form,
-        aliquota_iss_padrao: parseFloat(form.aliquota_iss_padrao) || 3,
-        regime_tributario: form.regime_tributario,
-      });
-      if (result?.error) setError(result.error);
-      else setSuccess(true);
-    });
+    startTransition(persistRegistration);
   }
 
   const handleParseCert = async () => {
@@ -69,7 +98,7 @@ export default function EmpresaPage() {
     }
     setCertReading(true);
     setCertError(null);
-    setCertSuccess(false);
+    setCertSuccess(null);
     try {
       const fd = new FormData();
       fd.append("file", certFile);
@@ -89,7 +118,7 @@ export default function EmpresaPage() {
         razao_social: data.razaoSocial || prev.razao_social,
       }));
       
-      setCertSuccess(true);
+      setCertSuccess("Dados lidos do certificado. Salve o cadastro para enviar a empresa e o certificado.");
       setCertError(null);
     } catch (e: unknown) {
       setCertError(e instanceof Error ? e.message : "Erro desconhecido");
@@ -105,24 +134,9 @@ export default function EmpresaPage() {
     }
     setCertUploading(true);
     setCertError(null);
-    setCertSuccess(false);
+    setCertSuccess(null);
     try {
-      const fd = new FormData();
-      fd.append("file", certFile);
-      fd.append("cnpj", form.cnpj);
-      fd.append("password", certPassword);
-      fd.append("environment", form.environment || "production");
-
-      const res = await fetch("/api/fiscal/certificado", { method: "POST", body: fd });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Erro no upload");
-      }
-      setCertSuccess(true);
-      setCertFile(null);
-      setCertPassword("");
-    } catch (e: unknown) {
-      setCertError(e instanceof Error ? e.message : "Erro desconhecido");
+      await persistRegistration();
     } finally {
       setCertUploading(false);
     }
@@ -245,21 +259,13 @@ export default function EmpresaPage() {
 
         {/* NFS-e */}
         <div className="card space-y-4">
-          <h2 className="font-semibold text-gray-800">Configurações NFS-e</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="label">Login da prefeitura (opcional)</label>
-              <input className="input" value={form.nfse_login} onChange={(e) => set("nfse_login", e.target.value)} placeholder="Login da prefeitura, se aplicável" />
-            </div>
-            <div>
-              <label className="label">Senha da prefeitura (opcional)</label>
-              <input className="input" type="password" value={form.nfse_password} onChange={(e) => set("nfse_password", e.target.value)} placeholder="Senha da prefeitura, se aplicável" />
-            </div>
-          </div>
+          <h2 className="font-semibold text-gray-800">NFS-e Nacional — SEFIN</h2>
+          <p className="text-sm text-gray-700">As notas são emitidas na SEFIN Nacional pela Nuvem Local Fiscal.</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
-              <label className="label">Código de Serviço padrão</label>
-              <input className="input" value={form.codigo_servico_padrao} onChange={(e) => set("codigo_servico_padrao", e.target.value)} placeholder="Consulte seu contador" />
+              <label className="label">Código de tributação nacional *</label>
+              <input className="input" value={form.codigo_servico_padrao} onChange={(e) => set("codigo_servico_padrao", e.target.value)} placeholder="Ex.: 14.01.01" required />
+              <p className="text-sm text-gray-700 mt-1">Informe os 6 dígitos conforme o serviço e a orientação do contador.</p>
             </div>
             <div>
               <label className="label">CNAE padrão</label>
@@ -285,12 +291,12 @@ export default function EmpresaPage() {
 
         {success && (
           <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg flex items-center gap-2">
-            <CheckCircle size={16} /> Dados salvos com sucesso!
+            <CheckCircle size={16} /> Empresa sincronizada com a Nuvem Local Fiscal!
           </p>
         )}
 
-        <button type="submit" disabled={isPending} className="btn-primary">
-          {isPending ? "Salvando..." : "Salvar dados"}
+        <button type="submit" disabled={isPending || certUploading || certReading} className="btn-primary">
+          {isPending ? "Salvando..." : certFile ? "Salvar empresa e certificado" : "Salvar dados"}
         </button>
       </form>
 
@@ -298,14 +304,14 @@ export default function EmpresaPage() {
       <div className="card space-y-4">
         <h2 className="font-semibold text-gray-800">Certificado Digital (.pfx)</h2>
         <p className="text-sm text-gray-500">
-          Opcional conforme a prefeitura. O certificado pode ser usado também em Guaíra; em Toledo, login e senha não são obrigatórios.
+          O certificado A1 da empresa é necessário para assinar e transmitir a DPS à SEFIN Nacional.
         </p>
         <div>
           <label className="label">Arquivo .pfx</label>
           <input
             type="file"
-            accept=".pfx"
-            onChange={(e) => { setCertFile(e.target.files?.[0] || null); setCertSuccess(false); setCertError(null); }}
+            accept=".pfx,.p12"
+            onChange={(e) => { setCertFile(e.target.files?.[0] || null); setCertSuccess(null); setCertError(null); setSuccess(false); }}
             className="input"
           />
         </div>
@@ -324,14 +330,14 @@ export default function EmpresaPage() {
         )}
         {certSuccess && (
           <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg flex items-center gap-2">
-            <CheckCircle size={16} /> Ação realizada com sucesso!
+            <CheckCircle size={16} /> {certSuccess}
           </p>
         )}
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
             onClick={handleParseCert}
-            disabled={certReading || certUploading || !certFile || !certPassword}
+            disabled={isPending || certReading || certUploading || !certFile || !certPassword}
             className="btn-secondary"
           >
             {certReading ? "Lendo..." : "Autopreencher dados"}
@@ -339,10 +345,10 @@ export default function EmpresaPage() {
           <button
             type="button"
             onClick={handleUploadCert}
-            disabled={certReading || certUploading || !certFile || !certPassword}
+            disabled={isPending || certReading || certUploading || !certFile || !certPassword}
             className="btn-primary"
           >
-            {certUploading ? "Enviando..." : "Enviar Certificado"}
+            {certUploading ? "Enviando..." : "Salvar empresa e certificado"}
           </button>
         </div>
       </div>

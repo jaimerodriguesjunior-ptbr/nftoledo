@@ -35,7 +35,7 @@ export async function register(_: unknown, formData: FormData) {
     email,
     password,
     options: {
-      data: { full_name: name },
+      data: { full_name: name, application: "nftoledo" },
     },
   });
 

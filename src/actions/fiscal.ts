@@ -3,6 +3,9 @@
 import { createClient } from "@/utils/supabase/server";
 import { getNuvemFiscalToken } from "@/lib/nuvemfiscal";
 import { revalidatePath } from "next/cache";
+import { getLocalFiscalBaseUrl } from "@/lib/local-fiscal-config";
+import { NFSE_PROVIDER, nationalServiceCode, nationalMunicipalityCode, readNationalNfseConfig, buildNfseDates } from "@/lib/nfse-national";
+import { buildNationalIss } from "@/lib/nfse-iss";
 
 async function getOrgId() {
   const supabase = await createClient();
@@ -64,35 +67,6 @@ function hasValidCpfOrCnpj(value: unknown): boolean {
   return false;
 }
 
-function getSaoPauloDate(customDate?: string) {
-  let d: Date;
-
-  if (customDate) {
-    const [y, m, day] = customDate.split("-").map(Number);
-    d = new Date(Date.UTC(y, m - 1, day, 15, 0, 0));
-  } else {
-    d = new Date();
-  }
-
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(d);
-
-  const year = parts.find((p) => p.type === "year")?.value || "2026";
-  const month = parts.find((p) => p.type === "month")?.value || "01";
-  const day = parts.find((p) => p.type === "day")?.value || "01";
-  const dCompet = `${year}-${month}-${day}`;
-
-  return {
-    dhEmi: `${dCompet}T12:00:00-03:00`,
-    dCompet,
-    mesReferencia: `${year}-${month}`,
-  };
-}
-
 type EmitirParams = {
   clientId: string;
   descricao: string;
@@ -121,6 +95,62 @@ type NuvemResult = {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function nfseOutcomeFromProvider(result: NuvemResult, fallback: string) {
+  const status = String(result.status || "").toLowerCase();
+  if (["autorizado", "autorizada"].includes(status)) return { status: "authorized", errorMessage: null };
+  if (["cancelado", "cancelada"].includes(status)) return { status: "cancelled", errorMessage: null };
+  if (["erro", "rejeitado", "rejeitada", "negado", "negada"].includes(status)) {
+    const message = result.mensagens?.length
+      ? result.mensagens.map(m => `${m.codigo}: ${m.descricao}`).join(" | ")
+      : String(result.motivo || result.motivo_status || result.message || JSON.stringify(result));
+    return { status: "error", errorMessage: message };
+  }
+  return { status: fallback, errorMessage: null };
+}
+
+function nfseProviderFields(result: NuvemResult) {
+  return {
+    ...(result.id ? { nuvemfiscal_uuid: result.id } : {}),
+    ...(result.numero != null ? { numero: String(result.numero) } : {}),
+    ...(result.serie != null ? { serie: String(result.serie) } : {}),
+    chave_acesso: result.chave || result.codigo_verificacao,
+    xml_url: result.xml_url,
+    pdf_url: result.pdf_url || result.link_url,
+  };
+}
+
+async function readNuvemResult(response: Response): Promise<NuvemResult> {
+  const body = await response.text();
+  try {
+    const result = JSON.parse(body) as NuvemResult;
+    return {
+      ...result,
+      ...(result.numero != null ? { numero: String(result.numero) } : {}),
+      ...(result.serie != null ? { serie: String(result.serie) } : {}),
+    };
+  }
+  catch { return { message: body }; }
+}
+
+async function transmitPreparedHomologationDps(baseUrl: string, token: string, result: NuvemResult) {
+  if (result.status !== "processamento" || result.motivo_status !== "NFSE_NACIONAL_DPS_GENERATED" || !result.id) return result;
+  const response = await fetch(`${baseUrl}/nfse/${result.id}/transmitir-homologacao-nacional`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmacao: "TRANSMITIR DPS NACIONAL EM HOMOLOGACAO" }),
+  });
+  if (response.status === 409) {
+    const current = await fetch(`${baseUrl}/nfse/${result.id}`, {
+      headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
+    });
+    if (current.ok) return { ...result, ...await readNuvemResult(current) };
+  }
+  const transmitted = await readNuvemResult(response);
+  return { ...result, ...transmitted,
+    ...(!response.ok ? { status: "erro", motivo: transmitted.message || transmitted.motivo || "Falha ao transmitir a DPS de homologação." } : {}),
+  };
 }
 
 function isMissingBatchOriginColumn(error: unknown) {
@@ -166,7 +196,7 @@ export async function emitirNFSe(params: EmitirParams) {
 
     if (!client) throw new Error("Cliente não encontrado.");
 
-    const { dhEmi, dCompet, mesReferencia: mesAuto } = getSaoPauloDate(dataCompetencia);
+    const { dhEmi, dCompet, mesReferencia: mesAuto } = buildNfseDates(dataCompetencia);
     const mesFinal = mesReferencia || mesAuto;
     const cleanDoc = onlyDigits(client.cpf_cnpj);
 
@@ -202,193 +232,31 @@ export async function emitirNFSe(params: EmitirParams) {
       }
     }
 
-    const codServico = String(company.codigo_servico_padrao || "").trim();
-    const codServicoDigits = onlyDigits(codServico);
-    if (!codServicoDigits) throw new Error("Codigo de servico nao informado. Configure em Minha Empresa antes de emitir.");
-    if (!codServico) throw new Error("Código de serviço não informado. Configure em Minha Empresa antes de emitir.");
+    const ibgeMunicipio = nationalMunicipalityCode(company.codigo_municipio_ibge);
     const cnaeCode = company.cnae_padrao || "";
-    const aliquota = company.aliquota_iss_padrao ?? 3.0;
     const totalFinal = Number(toMoneyNumber(valor, 0).toFixed(2));
-
     if (totalFinal <= 0) throw new Error("Valor deve ser maior que zero.");
 
     const token = await getNuvemFiscalToken(env);
-    const baseUrl =
-      env === "production"
-        ? process.env.NUVEMFISCAL_PROD_URL || "https://api.nuvemfiscal.com.br"
-        : process.env.NUVEMFISCAL_HOM_URL || "https://api.sandbox.nuvemfiscal.com.br";
-
+    const baseUrl = getLocalFiscalBaseUrl(env);
     const cnpj = onlyDigits(company.cnpj || company.cpf_cnpj);
-    const inscricaoMunicipal = String(company.inscricao_municipal || "")
-      .replace(/\D/g, "")
-      .trim();
-    const ibgeMunicipio = onlyDigits(company.codigo_municipio_ibge || "4108809") || "4108809";
-    const isGuaira = ibgeMunicipio === "4108809";
-    const isToledo = ibgeMunicipio === "4127700";
-    const defaultMunicipioCep = isToledo ? "85900000" : isGuaira ? "85980000" : undefined;
-    const companyCep = onlyDigits(company.cep);
-    const companyCepToSend = companyCep.length === 8 ? companyCep : defaultMunicipioCep;
-
-    if (isToledo && !inscricaoMunicipal) {
-      throw new Error("Inscrição municipal não configurada para Toledo. Acesse Minha Empresa.");
-    }
-    const companyEmailContato = String(company.email_contato || "").trim();
-    if (isToledo && !companyEmailContato) {
-      throw new Error("Email de contato da empresa obrigatório para emissão em Toledo. Preencha em Minha Empresa.");
-    }
-
-    // Sync empresa Toledo
-    if (isToledo && inscricaoMunicipal) {
-      const empresaPayload = {
-        cpf_cnpj: cnpj,
-        nome_razao_social: company.razao_social || company.nome_fantasia || cnpj,
-        nome_fantasia: company.nome_fantasia || company.razao_social || cnpj,
-        email: companyEmailContato,
-        inscricao_estadual: company.inscricao_estadual || undefined,
-        inscricao_municipal: inscricaoMunicipal,
-        endereco: {
-          logradouro: company.logradouro || undefined,
-          numero: company.numero || undefined,
-          complemento: company.complemento || undefined,
-          bairro: company.bairro || undefined,
-          codigo_municipio: ibgeMunicipio,
-          cidade: company.cidade || undefined,
-          uf: company.uf || undefined,
-          cep: companyCepToSend,
-          pais: "BRASIL",
-        },
-      };
-
-      const syncPut = await fetch(`${baseUrl}/empresas/${cnpj}`, {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(empresaPayload),
-      });
-      if (!syncPut.ok && syncPut.status === 404) {
-        const syncPost = await fetch(`${baseUrl}/empresas`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify(empresaPayload),
-        });
-        if (!syncPost.ok) {
-          throw new Error(`Erro ao cadastrar empresa Toledo na Nuvem Fiscal: ${await syncPost.text()}`);
-        }
-      } else if (!syncPut.ok) {
-        throw new Error(`Erro ao atualizar empresa Toledo na Nuvem Fiscal: ${await syncPut.text()}`);
-      }
-
-    }
-
-    const getCodigoNacional = (raw: string) => {
-      const digits = raw.replace(/[.-]/g, "");
-      if (isToledo) {
-        return digits.length >= 4 ? `${digits.substring(0, 2)}.${digits.substring(2, 4)}` : digits;
-      }
-      if (isGuaira) {
-        if (digits.length >= 6) return digits.substring(0, 6);
-        if (digits.length === 4) return `${digits}01`;
-        return digits;
-      }
-      if (digits.length >= 4) return `${digits.substring(0, 2)}.${digits.substring(2, 4)}`;
-      return digits;
-    };
-
-    const getCodigoMunicipal = (raw: string) => {
-      const digits = raw.replace(/[.-]/g, "");
-      if (isToledo) {
-        if (digits.length >= 9) return `${digits.substring(0, 2)}.${digits.substring(2, 4)}.${digits.substring(4, 6)}.${digits.substring(6, 9)}`;
-        if (digits.length === 6) return `${digits.substring(0, 2)}.${digits.substring(2, 4)}.${digits.substring(4, 6)}.000`;
-        if (digits.length === 4) return `${digits.substring(0, 2)}.${digits.substring(2, 4)}.01.000`;
-        return digits;
-      }
-      if (digits.length >= 6) return digits.substring(0, 6);
-      if (digits.length === 4 && ibgeMunicipio === "4108809" && digits === "1401") return "140101";
-      return digits;
-    };
-
-    const cTribNac = getCodigoNacional(codServicoDigits);
-    const cTribMun = getCodigoMunicipal(codServicoDigits);
-
-    if (isToledo && (codServicoDigits.length < 4 || !cTribNac || !cTribMun)) {
-      throw new Error("Servico da LC 116 obrigatorio para Toledo. Informe o codigo de servico no formato 14.01, 14.01.01 ou 14.01.01.000.");
-    }
-
-    if (isToledo && inscricaoMunicipal) {
-      const nfsePayload = {
-        ambiente: env === "production" ? "producao" : "homologacao",
-        provedor: "toledo-equiplano",
-        municipio: {
-          codigo_ibge: ibgeMunicipio,
-          nome: company.cidade || "Toledo",
-        },
-        rps: {
-          serie: "1",
-          emissor: "1",
-        },
-        equiplano: {
-          endpoint: "https://www.esnfs.com.br:9443//homologacaows/services/Enfs",
-          soap_action: "http://services.enfsws.es/esRecepcionarLoteRps",
-          request_format: "soap",
-          inscricao_municipal: inscricaoMunicipal,
-          id_entidade: "136",
-        },
-        servico: {
-          codigo: cTribMun,
-          aliquota_iss: aliquota,
-          codigo_atividade: cnaeCode,
-        },
-        transmissao_automatica: true,
-      };
-
-      const nfsePut = await fetch(`${baseUrl}/empresas/${cnpj}/nfse`, {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(nfsePayload),
-      });
-
-      if (!nfsePut.ok && nfsePut.status === 404) {
-        const nfsePost = await fetch(`${baseUrl}/empresas/${cnpj}/nfse`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify(nfsePayload),
-        });
-
-        if (!nfsePost.ok) {
-          throw new Error(`Erro ao cadastrar configuracao NFS-e Toledo na Nuvem Fiscal: ${await nfsePost.text()}`);
-        }
-      } else if (!nfsePut.ok) {
-        throw new Error(`Erro ao atualizar configuracao NFS-e Toledo na Nuvem Fiscal: ${await nfsePut.text()}`);
-      }
-    }
-
-    const normalizeMunicipio = (codigo?: string | number) => {
-      if (!codigo) return ibgeMunicipio;
-      const raw = String(codigo).replace(/\D/g, "");
-      return raw || ibgeMunicipio;
-    };
+    // A emissão consulta a configuração validada, sem redefini-la a cada nota.
+    const nfseConfig = await readNationalNfseConfig(baseUrl, token, cnpj, env === "production" ? "producao" : "homologacao");
+    const codServico = nationalServiceCode(nfseConfig.nacional?.codigo_tributacao_nacional ?? company.codigo_servico_padrao);
+    const issPayload = buildNationalIss(nfseConfig, ibgeMunicipio, company.aliquota_iss_padrao);
 
     // Tomador (cliente)
     const clientPhone = onlyDigits(client.telefone);
-    const companyPhone = onlyDigits(company.telefone);
-    const phoneToSend = clientPhone || companyPhone;
     const clientCep = onlyDigits(client.cep);
-    const cepToSend = clientCep.length === 8 ? clientCep : companyCepToSend;
-
-    if (isToledo && !phoneToSend) {
-      throw new Error("Telefone obrigatorio para emissao em Toledo. Preencha o telefone do cliente ou da empresa antes de emitir.");
-    }
-    if (isToledo && !cepToSend) {
-      throw new Error("CEP obrigatorio para emissao em Toledo. Preencha o CEP do cliente ou da empresa antes de emitir.");
-    }
-
-    const blockEnd = cepToSend
+    if (client.cep && clientCep.length !== 8) throw new Error("O CEP do cliente deve conter 8 dígitos. Corrija o cadastro antes de emitir.");
+    const blockEnd = clientCep.length === 8
       ? {
-          xLgr: client.logradouro || company.logradouro || "Nao Informado",
-          nro: client.numero || company.numero || "SN",
-          xBairro: client.bairro || company.bairro || "Centro",
+          xLgr: client.logradouro || undefined,
+          nro: client.numero || undefined,
+          xBairro: client.bairro || undefined,
           endNac: {
-            cMun: normalizeMunicipio(client.codigo_municipio_ibge || company.codigo_municipio_ibge),
-            CEP: cepToSend,
+            cMun: nationalMunicipalityCode(client.codigo_municipio_ibge),
+            CEP: clientCep,
           },
         }
       : undefined;
@@ -397,25 +265,28 @@ export async function emitirNFSe(params: EmitirParams) {
     const xDescServ = `${descClean} (R$ ${totalFinal.toFixed(2)})`;
 
     const dpsPayload = {
+      provedor: NFSE_PROVIDER,
       ambiente: env === "production" ? "producao" : "homologacao",
       infDPS: {
         dhEmi,
         dCompet,
-        prest: { CNPJ: cnpj },
+        prest: {
+          CNPJ: cnpj,
+          // Diretriz validada no Apoio Contábil: Guaíra informa a IM; Toledo omite.
+          ...(ibgeMunicipio === "4108809" && onlyDigits(company.inscricao_municipal)
+            ? { IM: onlyDigits(company.inscricao_municipal) } : {}),
+        },
         toma: {
           CNPJ: cleanDoc.length > 11 ? cleanDoc : undefined,
           CPF: cleanDoc.length > 0 && cleanDoc.length <= 11 ? cleanDoc : undefined,
           xNome: client.nome,
           email: client.email || undefined,
-          fone: phoneToSend || undefined,
+          fone: clientPhone || undefined,
           end: blockEnd,
         },
         serv: {
           cServ: {
-            cTribNac,
-            cTribMun,
-            CNAE: cnaeCode,
-            cSitTrib: "0",
+            cTribNac: codServico,
             xDescServ,
           },
           locPrest: { cLocPrestacao: ibgeMunicipio },
@@ -423,13 +294,7 @@ export async function emitirNFSe(params: EmitirParams) {
         valores: {
           vServPrest: { vServ: totalFinal },
           trib: {
-            tribMun: {
-              tribISSQN: 1,
-              tpRetISSQN: 1,
-              pAliq: aliquota,
-              vISSQN: isToledo ? undefined : 0,
-              cLocIncid: ibgeMunicipio,
-            },
+            tribMun: issPayload,
           },
         },
       },
@@ -448,7 +313,7 @@ export async function emitirNFSe(params: EmitirParams) {
         descricao_servico: descricao,
         codigo_servico: codServico,
         cnae: cnaeCode,
-        aliquota_iss: aliquota,
+        aliquota_iss: issPayload.pAliq ?? null,
         data_emissao: dhEmi,
         mes_referencia: mesFinal,
         emission_origin: emissionOrigin,
@@ -473,69 +338,46 @@ export async function emitirNFSe(params: EmitirParams) {
       body: JSON.stringify(dpsPayload),
     });
 
-    const responseText = await response.text();
-    let result: NuvemResult = {};
-    try { result = JSON.parse(responseText) as NuvemResult; } catch { result = {}; }
-
-    if (!response.ok) {
-      const errorDetails = result.error?.message || JSON.stringify(result);
-      const fullErrorString = JSON.stringify(result);
-      const normalized = `${errorDetails} ${fullErrorString}`.toLowerCase();
-
-      const isToledoCredentialIssue =
-        (normalized.includes("1824") && normalized.includes("nrinscricaomunicipal")) ||
-        normalized.includes("8003");
-
-      if (isToledo && isToledoCredentialIssue) {
-        await supabase.from("fiscal_invoices").update({ status: "error", error_message: fullErrorString }).eq("id", invoiceId);
-        return {
-          success: false,
-          error: `Erro Toledo: ${errorDetails}\nVerifique na Nuvem Fiscal o cadastro da empresa e configuração NFS-e (login/IM).`,
-        };
-      }
-
-      // Auto-retry erro 00229 (endereço já cadastrado)
-      if (fullErrorString.includes("229") || (fullErrorString.includes("cadastr") && fullErrorString.includes("endere"))) {
-        console.log("[NFSe] Erro 00229 detectado. Reenviando sem endereço...");
-        if (dpsPayload.infDPS.toma.end) {
-          dpsPayload.infDPS.toma.end = undefined;
-          const retry = await fetch(`${baseUrl}/nfse/dps`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-            body: JSON.stringify(dpsPayload),
-          });
-          if (retry.ok) {
-            const retryResult = await retry.json() as NuvemResult;
-            result = retryResult;
-          } else {
-            const retryErr = JSON.stringify(await retry.json());
-            await supabase.from("fiscal_invoices").update({ status: "error", error_message: retryErr }).eq("id", invoiceId);
-            return { success: false, error: `Erro NuvemFiscal (retry falhou): ${retryErr}` };
-          }
-        } else {
-          await supabase.from("fiscal_invoices").update({ status: "error", error_message: fullErrorString }).eq("id", invoiceId);
-          return { success: false, error: `Erro NuvemFiscal: ${errorDetails}` };
-        }
-      } else {
-        await supabase.from("fiscal_invoices").update({ status: "error", error_message: fullErrorString }).eq("id", invoiceId);
-        return { success: false, error: `Erro NuvemFiscal: ${errorDetails}` };
+    let result = await readNuvemResult(response);
+    // Guarda o ID inclusive em rejeições: a consulta recupera a mesma DPS.
+    if (result.id) {
+      await supabase.from("fiscal_invoices").update(nfseProviderFields(result)).eq("id", invoiceId);
+    }
+    let accepted = response.ok;
+    if (!accepted && result.id && JSON.stringify(result).includes("E0014")) {
+      const existing = await fetch(`${baseUrl}/nfse/${result.id}?consultar_nacional=1`, {
+        headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
+      });
+      if (existing.ok) {
+        result = { ...result, ...await readNuvemResult(existing) };
+        accepted = true;
       }
     }
+    if (!accepted) {
+      const errorDetails = result.error?.message || result.message || result.motivo || JSON.stringify(result);
+      await supabase.from("fiscal_invoices").update({
+        ...nfseProviderFields(result), status: "error", error_message: String(errorDetails),
+      }).eq("id", invoiceId);
+      return { success: false, error: `Erro SEFIN Nacional: ${errorDetails}` };
+    }
 
-    // Sucesso
+    if (!result.id) throw new Error("A Nuvem Local Fiscal não retornou o identificador da DPS. Confira a emissão antes de tentar novamente.");
+    if (env === "homologation") result = await transmitPreparedHomologationDps(baseUrl, token, result);
+
+    const outcome = nfseOutcomeFromProvider(result, "processing");
     await supabase
       .from("fiscal_invoices")
       .update({
-        status: "processing",
-        nuvemfiscal_uuid: result.id,
-        numero: result.numero,
-        serie: result.serie,
+        ...nfseProviderFields(result),
+        status: outcome.status,
+        error_message: outcome.errorMessage,
         payload_json: dpsPayload,
       })
       .eq("id", invoiceId);
 
     revalidatePath("/notas");
-    return { success: true, invoiceId };
+    if (outcome.status === "error") return { success: false, error: outcome.errorMessage || "NFS-e rejeitada." };
+    return { success: true, invoiceId, status: outcome.status };
   } catch (error: unknown) {
     console.error("[emitirNFSe] Erro:", error);
     const errorMessage = getErrorMessage(error);
@@ -563,10 +405,7 @@ export async function consultarNFSe(invoiceId: string) {
 
   const env = (invoice.environment as "production" | "homologation") || "production";
   const token = await getNuvemFiscalToken(env);
-  const baseUrl =
-    env === "production"
-      ? process.env.NUVEMFISCAL_PROD_URL || "https://api.nuvemfiscal.com.br"
-      : process.env.NUVEMFISCAL_HOM_URL || "https://api.sandbox.nuvemfiscal.com.br";
+  const baseUrl = getLocalFiscalBaseUrl(env);
 
   const response = await fetch(`${baseUrl}/nfse/${invoice.nuvemfiscal_uuid}`, {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -577,29 +416,13 @@ export async function consultarNFSe(invoiceId: string) {
     return { success: false, error: err.error?.message || "Erro ao consultar." };
   }
 
-  const result = await response.json() as NuvemResult;
-
-  let novoStatus = invoice.status;
-  let errorMessage = null;
-  const providerStatus = String(result.status || "").toLowerCase();
-
-  if (providerStatus === "autorizado" || providerStatus === "autorizada") novoStatus = "authorized";
-  else if (providerStatus && ["erro", "rejeitado", "rejeitada", "negado", "negada"].includes(providerStatus)) {
-    novoStatus = "error";
-    if (result.mensagens?.length) {
-      errorMessage = result.mensagens.map((m) => `${m.codigo}: ${m.descricao}`).join(" | ");
-    } else {
-      errorMessage = result.motivo_status || JSON.stringify(result);
-    }
-  } else if (providerStatus === "cancelado" || providerStatus === "cancelada") novoStatus = "cancelled";
+  let result = await readNuvemResult(response);
+  if (env === "homologation") result = await transmitPreparedHomologationDps(baseUrl, token, result);
+  const { status: novoStatus, errorMessage } = nfseOutcomeFromProvider(result, invoice.status || "processing");
 
   const updateData: Record<string, unknown> = {
     status: novoStatus,
-    numero: result.numero,
-    serie: result.serie,
-    chave_acesso: result.chave || result.codigo_verificacao,
-    xml_url: result.xml_url,
-    pdf_url: result.pdf_url || result.link_url,
+    ...nfseProviderFields(result),
     error_message: errorMessage,
     updated_at: new Date().toISOString(),
   };
@@ -647,10 +470,7 @@ export async function cancelarNFSe(invoiceId: string, motivo: string, codigo?: s
 
   const env = (invoice.environment as "production" | "homologation") || "production";
   const token = await getNuvemFiscalToken(env);
-  const baseUrl =
-    env === "production"
-      ? process.env.NUVEMFISCAL_PROD_URL || "https://api.nuvemfiscal.com.br"
-      : process.env.NUVEMFISCAL_HOM_URL || "https://api.sandbox.nuvemfiscal.com.br";
+  const baseUrl = getLocalFiscalBaseUrl(env);
 
   const response = await fetch(`${baseUrl}/nfse/${invoice.nuvemfiscal_uuid}/cancelamento`, {
     method: "POST",

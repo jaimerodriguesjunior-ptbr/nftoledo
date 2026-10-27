@@ -3,6 +3,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 import { syncCompanyWithLocalFiscal } from "@/lib/nuvem-local-fiscal";
+import { pickCompanySettings } from "@/lib/company-settings";
 
 async function getOrgId() {
   const supabase = await createClient();
@@ -36,8 +37,8 @@ export async function saveCompany(data: Record<string, unknown>) {
   if (!orgId) return { error: "Organização não encontrada" };
 
   const settings = {
+    ...pickCompanySettings(data),
     organization_id: orgId,
-    ...data,
     updated_at: new Date().toISOString(),
   };
 
@@ -45,8 +46,8 @@ export async function saveCompany(data: Record<string, unknown>) {
     (["production", "homologation"] as const).map(async (environment) => ({
       environment,
       result: await syncCompanyWithLocalFiscal({
-        organizationId: orgId,
         ...settings,
+        organizationId: orgId,
         environment,
       }),
     }))

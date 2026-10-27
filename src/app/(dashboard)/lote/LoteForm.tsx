@@ -64,16 +64,6 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isDuplicateRpsError(error?: string) {
-  const normalized = String(error || "").toLowerCase();
-  return (
-    normalized.includes("rps informado já foi convertido") ||
-    normalized.includes("rps informado ja foi convertido") ||
-    normalized.includes("rps:") ||
-    normalized.includes("8011")
-  );
-}
-
 function hasValidCpfOrCnpj(value?: string | null) {
   const doc = onlyDigits(value);
 
@@ -418,19 +408,7 @@ export default function LoteForm({
         await sleep(RETRY_DELAY_MS);
       }
 
-      const firstPassResults = await Promise.all(
-        chunk.map(async (row) => ({ row, result: await processEmission(row) }))
-      );
-
-      // Retry automatico para erros de RPS duplicado (nota ja convertida)
-      const retryRows = firstPassResults
-        .filter(({ result }) => !result.success && isDuplicateRpsError(result.error))
-        .map(({ row }) => row);
-
-      for (const retryRow of retryRows) {
-        await sleep(RETRY_DELAY_MS);
-        await processEmission(retryRow);
-      }
+      await Promise.all(chunk.map(processEmission));
     }
 
     setIsRunning(false);

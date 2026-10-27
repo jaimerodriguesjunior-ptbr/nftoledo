@@ -166,6 +166,10 @@ as $$
 declare
   new_org_id uuid;
 begin
+  if coalesce(new.raw_user_meta_data->>'application', '') <> 'nftoledo' then
+    return new;
+  end if;
+
   insert into organizations (name)
   values (coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)))
   returning id into new_org_id;
